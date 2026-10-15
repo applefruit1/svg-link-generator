@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
+COUNT = 10
 source = Path("source.svg")
 output_dir = Path("generated")
 
@@ -22,34 +23,42 @@ except ET.ParseError as exc:
 if root.tag.split("}")[-1].lower() != "svg":
     raise SystemExit("ERROR: The root element must be <svg>.")
 
-stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
-unique_id = uuid.uuid4().hex[:16]
-filename = f"{stamp}_{unique_id}.svg"
-
-output_dir.mkdir(parents=True, exist_ok=True)
-output_path = output_dir / filename
-output_path.write_text(content + "\n", encoding="utf-8")
-
 repo = os.environ["GITHUB_REPOSITORY"]
 branch = os.environ.get("GITHUB_REF_NAME", "main")
-relative_path = f"generated/{filename}"
+output_dir.mkdir(parents=True, exist_ok=True)
 
-github_url = f"https://github.com/{repo}/blob/{branch}/{relative_path}"
-cdn_url = f"https://cdn.jsdelivr.net/gh/{repo}@{branch}/{relative_path}"
+created = []
+for number in range(1, COUNT + 1):
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    unique_id = uuid.uuid4().hex[:16]
+    filename = f"{stamp}_{unique_id}.svg"
+    output_path = output_dir / filename
+    output_path.write_text(content + "\n", encoding="utf-8")
 
-subprocess.run(["git", "add", str(output_path)], check=True)
+    relative_path = f"generated/{filename}"
+    github_url = f"https://github.com/{repo}/blob/{branch}/{relative_path}"
+    cdn_url = f"https://cdn.jsdelivr.net/gh/{repo}@{branch}/{relative_path}"
+    created.append((number, filename, github_url, cdn_url))
+
+# Commit all ten files in one commit, then publish them.
+subprocess.run(["git", "add", "generated/"], check=True)
 subprocess.run(
     [
         "git", "-c", "user.name=github-actions[bot]",
         "-c", "user.email=41898282+github-actions[bot]@users.noreply.github.com",
-        "commit", "-m", f"Generate SVG {filename}"
+        "commit", "-m", f"Generate {COUNT} SVG files"
     ],
     check=True
 )
 subprocess.run(["git", "push"], check=True)
 
-print("\nSVG GENERATED SUCCESSFULLY")
-print(f"Filename: {filename}")
-print(f"GitHub: {github_url}")
-print(f"jsDelivr: {cdn_url}")
-print(f"SHA-256: {hashlib.sha256(content.encode()).hexdigest()}")
+print(f"\nSUCCESS: GENERATED {COUNT} SVG FILES")
+print("\nGITHUB LINKS")
+for number, filename, github_url, cdn_url in created:
+    print(f"{number}. {github_url}")
+
+print("\nJ SDELIVR LINKS")
+for number, filename, github_url, cdn_url in created:
+    print(f"{number}. {cdn_url}")
+
+print(f"\nSHA-256 of source SVG: {hashlib.sha256(content.encode()).hexdigest()}")
